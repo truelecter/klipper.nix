@@ -156,12 +156,14 @@
 
   mcuSections = lib.mapAttrs' (_: f: lib.nameValuePair f.section f.mcu) (lib.filterAttrs (_: f: f.mcu != {}) cfg.firmwares);
 
+  mcuText = lib.optionalString (mcuSections != {}) ("\n" + renderSections mcuSections);
+
   printerConfig =
     if cfg.settings != null
-    then pkgs.writeText "klipper.cfg" (renderSections cfg.settings + renderSections mcuSections + cfg.extraSettings)
+    then pkgs.writeText "klipper.cfg" (renderSections cfg.settings + mcuText + cfg.extraSettings)
     else if mcuSections == {}
     then cfg.configFile
-    else pkgs.concatText "klipper.cfg" [cfg.configFile (pkgs.writeText "klipper-mcus.cfg" ("\n" + renderSections mcuSections))];
+    else pkgs.concatText "klipper.cfg" [cfg.configFile (pkgs.writeText "klipper-mcus.cfg" mcuText)];
 in {
   disabledModules = ["services/misc/klipper.nix"];
 
