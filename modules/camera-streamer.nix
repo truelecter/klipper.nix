@@ -19,9 +19,9 @@
     };
 
   l = lib // builtins;
-  cfg = config.tl.services.camera-streamer;
+  cfg = config.services.camera-streamer;
 in {
-  options.tl.services.camera-streamer = {
+  options.services.camera-streamer = {
     instances = mkOption {
       description = "Set of camera-streamer instance.";
       default = {};

@@ -8,11 +8,15 @@
 
   inherit (l) mkEnableOption types mkOption;
 
-  cfg = config.tl.services.spoolman;
+  cfg = config.services.spoolman;
 
   defaultUser = "spoolman";
 in {
-  options.tl.services.spoolman = {
+  # Replaces nixpkgs' services.spoolman: this one runs the uv2nix build of the release, with its own
+  # data folder and user instead of a DynamicUser.
+  disabledModules = ["services/misc/spoolman.nix"];
+
+  options.services.spoolman = {
     enable = mkEnableOption "Spoolman helps to keep track of your inventory of 3D-printer filament spools";
 
     package = mkOption {

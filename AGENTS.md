@@ -30,11 +30,11 @@ sources/                     nvfetcher: `nvfetcher.toml` and the generated sourc
 
 - `modules/klipper.nix` replaces nixpkgs' `services.klipper` (`disabledModules`), rebased on its nixos-unstable version, so nixpkgs' moonraker module keeps reading `services.klipper.{enable,apiSocket,mutableConfig}`. Keep those options and their meaning. On a nixpkgs update, diff `nixos/modules/services/misc/klipper.nix` there against this module and port what changed.
 - Additions over nixpkgs: `firmware-package` (defaults to the firmware of `package`), `firmwares.<mcu>.{section,mcu}` (the MCU's config section, written after `settings` or `configFile` and read by the flasher), `extraConfigurationPackages` and plugin configs in `/etc/klipper/plugins`, `katapult.<mcu>`, `host-mcu`, fixed `user`/`group` (no DynamicUser, moonraker shares the user), firmware links in `/etc/klipper/firmwares`.
-- The other modules (`klipper-screen`, `camera-streamer`, `mobileraker-companion`, `spoolman`) live under `tl.services.*`.
+- `modules/spoolman.nix` replaces nixpkgs' `services.spoolman` the same way; its options differ (`dataDir`, `user`, `host`, `port`). `klipper-screen`, `camera-streamer`, and `mobileraker-companion` have no nixpkgs counterpart; if nixpkgs adds one under the same name, the evaluation fails with a duplicate option until the module here disables it.
 
 ## Test a change
 
-- `nix flake check --no-build --all-systems`, then `nix build .#packages.aarch64-linux.<name>` (an aarch64-linux builder, or x86_64-linux for the same names).
+- `nix flake check` (the current system; the Python packages read their requirements from fetched sources, so other systems need their own builder), then `nix build .#packages.aarch64-linux.<name>` (an aarch64-linux builder, or x86_64-linux for the same names).
 - A module change: evaluate a throwaway `nixosSystem` with `nixosModules.default` and build what you touched, for example `config.services.klipper.firmwares.<mcu>.klipperFlashPackage` and `config.systemd.services.klipper.restartTriggers` (the generated `printer.cfg`).
 - In a consumer, try a checkout before pushing: `--override-input klipper path:<this checkout>`.
 

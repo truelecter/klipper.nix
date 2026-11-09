@@ -5,7 +5,7 @@
   ...
 }:
 with lib; let
-  cfg = config.tl.services.mobileraker-companion;
+  cfg = config.services.mobileraker-companion;
 
   format = pkgs.formats.ini {
     # https://github.com/NixOS/nixpkgs/pull/121613#issuecomment-885241996
@@ -16,7 +16,7 @@ with lib; let
     mkKeyValue = generators.mkKeyValueDefault {} ":";
   };
 in {
-  options.tl.services.mobileraker-companion = {
+  options.services.mobileraker-companion = {
     enable = mkEnableOption "Companion for mobileraker, enabling push notification.";
 
     package = mkOption {

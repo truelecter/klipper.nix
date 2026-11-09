@@ -4,7 +4,7 @@
   pkgs,
   ...
 }: let
-  cfg = config.tl.services.klipper-screen;
+  cfg = config.services.klipper-screen;
   format = pkgs.formats.ini {
     # https://github.com/NixOS/nixpkgs/pull/121613#issuecomment-885241996
     listToValue = l:
@@ -16,7 +16,7 @@
 
   inherit (lib) mkEnableOption mkOption types;
 in {
-  options.tl.services.klipper-screen = {
+  options.services.klipper-screen = {
     enable = mkEnableOption "KlipperScreen, the touchscreen GUI that interfaces with Klipper via Moonraker";
 
     package = mkOption {
