@@ -1,5 +1,6 @@
 {
   stdenv,
+  buildPackages,
   lib,
   python3,
   makeWrapper,
@@ -12,6 +13,8 @@
   ...
 }: let
   python = python3;
+
+  isCross = stdenv.hostPlatform != stdenv.buildPlatform;
 
   mkPythonEnv = src: let
     pluginDependencies = pythonPackages:
@@ -61,16 +64,35 @@ in
 
     # NB: This is needed for the postBuild step
     nativeBuildInputs = [
-      (python.withPackages (p: with p; [cffi]))
+      (buildPackages.python3.withPackages (p: with p; [cffi]))
       makeWrapper
     ];
 
     buildInputs = [pythonEnv];
 
-    # we need to run this to prebuild the chelper.
-    postBuild = ''
-      python ./chelper/__init__.py
+    # We need to run this to prebuild the chelper .so. When cross compiling, a patch keeps the
+    # build from dlopen()ing the .so, which is built for the other architecture; the unpatched
+    # __init__.py goes back afterwards, because the dlopen() call is needed at runtime.
+    postBuild =
+      ''
+        python ./chelper/__init__.py
+      ''
+      + lib.optionalString isCross ''
+        mv ./chelper/__init__unpatched.py ./chelper/__init__.py
+      '';
+
+    prePatch = lib.optionalString isCross ''
+      cp ./chelper/__init__.py ./chelper/__init__unpatched.py
     '';
+
+    # https://github.com/Klipper3d/klipper/pull/7254
+    patches = lib.optionals isCross [
+      (
+        if isKalico
+        then ./_patches/cross-ffi-kalico.patch
+        else ./_patches/cross-ffi.patch
+      )
+    ];
 
     # Python 3 is already supported but shebangs aren't updated yet
     postPatch = ''
@@ -79,6 +101,10 @@ in
         [ -f $file ] && substituteInPlace $file \
           --replace-warn '/usr/bin/env python2' '/usr/bin/env python'
       done
+
+      # needed for cross compilation
+      substituteInPlace ./chelper/__init__*.py \
+        --replace-warn 'GCC_CMD = "gcc"' 'GCC_CMD = "${stdenv.cc.targetPrefix}cc"'
     '';
 
     pythonScriptWrapper = writeShellScript pname ''
@@ -103,6 +129,14 @@ in
       cp -r $src/docs $out/lib/docs
       cp -r $src/config $out/lib/config
       cp -r $src/scripts $out/lib/scripts
+      chmod u+w $out/lib/scripts
+      # Katapult's flashtool, which klipper-flash runs for MCUs on a CAN bus. Kalico still ships
+      # it under its old name (CanBoot).
+      if [ -e $src/lib/katapult/flashtool.py ]; then
+        cp $src/lib/katapult/flashtool.py $out/lib/scripts/flash_can.py
+      else
+        cp $src/lib/canboot/flash_can.py $out/lib/scripts/flash_can.py
+      fi
       ${
         if isKalico
         then ""
@@ -131,6 +165,11 @@ in
         --subst-var "out" \
         --subst-var-by "script" "calibrate_shaper.py"
       chmod 755 "$out/bin/klipper-calibrate-shaper"
+
+      substitute "$pythonScriptWrapper" "$out/bin/klipper-canbus-query" \
+        --subst-var "out" \
+        --subst-var-by "script" "canbus_query.py"
+      chmod 755 "$out/bin/klipper-canbus-query"
 
       runHook postInstall
     '';

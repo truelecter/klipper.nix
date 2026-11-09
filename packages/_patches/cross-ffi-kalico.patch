@@ -1,0 +1,15 @@
+Kalico's version of cross-ffi.patch: the same change, against Kalico's formatting of chelper.
+
+--- a/chelper/__init__.py
++++ b/chelper/__init__.py
+@@ -348,10 +348,4 @@
+         FFI_main = cffi.FFI()
+         for d in defs_all:
+             FFI_main.cdef(d)
+-        FFI_lib = FFI_main.dlopen(destlib)
+-        # Setup error logging
+-        pyhelper_logging_callback = FFI_main.callback(
+-            "void func(const char *)", logging_callback
+-        )
+-        FFI_lib.set_python_logging_callback(pyhelper_logging_callback)
+     return FFI_main, FFI_lib

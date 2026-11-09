@@ -1,0 +1,20 @@
+name: Install Nix
+description: Determinate Nix with the read-only nix-proxy cache in front of cache.nixos.org
+
+runs:
+  using: composite
+  steps:
+    # Determinate Nix retries a NAR download that broke mid-stream even when the server doesn't
+    # support ranged requests.
+    - uses: DeterminateSystems/determinate-nix-action@v3
+      with:
+        github-token: ${{ github.token }}
+        diagnostic-endpoint: ""
+        summarize: false
+        extra-conf: |
+          substituters = https://nix-proxy.tlctr.me https://cache.nixos.org/
+          trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-proxy.tlctr.me:o0mf52dfc6glFzwRRquMmGaphNAidwF6L/q2IFyB9qk= workflows:nGqDVYKhDZxnNXIemS1/Bq2+i1wwQ6GE/xG2OIiMNDw=
+          filetransfer-retry-attempts = 10
+          filetransfer-retry-delay = 1000
+          http2 = false
+          stalled-download-timeout = 60

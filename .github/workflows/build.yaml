@@ -1,0 +1,56 @@
+# Checks the flake and builds every package on each system. The Python packages read their
+# requirements from the fetched sources (import from derivation), so each system is evaluated on
+# its own runner. `build_aggregated` always reports, so it can be the one required check.
+name: Build
+on:
+  push:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: x86_64-linux
+            runner: ubuntu-24.04
+          - system: aarch64-linux
+            runner: ubuntu-24.04-arm
+          - system: aarch64-darwin
+            runner: macos-26
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      # The runner's / is small; /mnt has room for the firmware toolchains.
+      - name: Bind mount /nix
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          sudo mkdir /mnt/nix /nix
+          sudo chmod 0755 /nix
+          sudo mount --bind /mnt/nix /nix
+
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/install-nix
+
+      - name: Check the flake
+        run: nix flake check -L
+
+      - name: Build every package
+        run: |
+          nix eval --json '.#packages.${{ matrix.system }}' --apply builtins.attrNames \
+            | jq -r '.[] | ".#packages.${{ matrix.system }}." + .' \
+            | xargs nix build -L --no-link --keep-going
+
+  build_aggregated:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - run: exit 1
+        if: >-
+          ${{
+            contains(needs.*.result, 'failure')
+            || contains(needs.*.result, 'cancelled')
+            || contains(needs.*.result, 'skipped')
+          }}

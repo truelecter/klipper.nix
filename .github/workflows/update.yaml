@@ -1,0 +1,50 @@
+# Weekly update as a pull request with auto-merge: nvfetcher sources (Klipper, Kalico, plugins,
+# Moonraker, ...), Mainsail's npm dependency hash, then flake.lock. PR_WF_ENABLED_TOKEN is a token
+# whose pushes start workflows (GITHUB_TOKEN's don't), so the build runs on the pull request.
+name: Update sources and flake.lock
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * 6" # At 00:00 on Saturday
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/install-nix
+
+      - name: Configure git
+        run: |
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
+      - name: Update nvfetcher sources
+        run: |
+          nix develop --command nvfetcher --keep-old -c sources/nvfetcher.toml -o sources
+          git commit -am "deps(sources): update sources" || true
+
+      - name: Update the Mainsail npm dependency hash
+        run: |
+          nix run '.#mainsail.npmDepsHash' > packages/_deps-hash/mainsail-npm.nix
+          git commit -am "deps(sources): update mainsail npm hash" || true
+
+      - name: Update flake.lock
+        uses: DeterminateSystems/update-flake-lock@v21
+        id: ufl
+        with:
+          token: ${{ secrets.PR_WF_ENABLED_TOKEN }}
+          pr-title: "[Automated] Update sources and 'flake.lock'"
+          branch: "auto/update-dependencies"
+          commit-msg: "deps(repo): update flake.lock"
+          pr-labels: |
+            dependencies
+            automated
+
+      - name: Enable auto-merge
+        if: ${{ steps.ufl.outputs.pull-request-number != '' }}
+        run: |
+          gh pr merge --squash --auto "$PR_NUMBER" --subject "deps(repo): update sources and flake.lock"
+        env:
+          GH_TOKEN: ${{ secrets.PR_WF_ENABLED_TOKEN }}
+          PR_NUMBER: ${{ steps.ufl.outputs.pull-request-number }}
