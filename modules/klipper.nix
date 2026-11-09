@@ -78,6 +78,15 @@
         description = "Path to firmware config which is generated using `<package>-menuconfig`.";
       };
 
+      katapultConfigFile = mkOption {
+        type = types.nullOr types.path;
+        default = null;
+        description = ''
+          Path to this MCU's Katapult bootloader config, generated using `katapult-menuconfig`.
+          When set, the bootloader is built and linked to `/etc/klipper/katapult-firmwares/<name>`.
+        '';
+      };
+
       package = mkOption {
         type = types.nullOr types.package;
         readOnly = true;
@@ -88,6 +97,12 @@
         type = types.nullOr types.package;
         readOnly = true;
         description = "Path to the built klipper-flash package.";
+      };
+
+      katapultPackage = mkOption {
+        type = types.nullOr types.package;
+        readOnly = true;
+        description = "Path to the built Katapult bootloader, when `katapultConfigFile` is set.";
       };
     };
 
@@ -112,6 +127,15 @@
             canbusDevice = config.canbusUuid;
             inherit (config) canbusNetwork;
             firmwareConfig = config.configFile;
+          }
+        else null;
+
+      katapultPackage =
+        if config.katapultConfigFile != null
+        then
+          pkgs.katapult-firmware.override {
+            mcu = sanitize name;
+            firmwareConfig = config.katapultConfigFile;
           }
         else null;
     };
@@ -237,28 +261,24 @@ in {
       };
     };
 
-    katapult = mkOption {
-      description = "Katapult bootloader firmwares, linked to `/etc/klipper/katapult-firmwares/<mcu>`.";
-      default = {};
-      type = types.attrsOf (types.submodule {
-        options = {
-          enable = mkEnableOption "building of the Katapult firmware for manual flashing";
-
-          configFile = mkOption {
-            type = types.path;
-            description = "Path to firmware config which is generated using `katapult-menuconfig`.";
-          };
-        };
-      });
-    };
-
     host-mcu = {
-      enable = mkEnableOption "the host as an additional MCU for Klipper";
+      enable = mkEnableOption "the host (a Raspberry Pi or another Linux board) as an additional MCU for Klipper, running `klipper.elf` as the `klipper-mcu` service";
+
+      configFile = mkOption {
+        type = types.path;
+        default = ../packages/_files/host-mcu.config;
+        defaultText = literalExpression "a Linux process MCU config with every feature on";
+        description = "Firmware config of the host MCU (`CONFIG_MACH_LINUX`), generated using `<package>-menuconfig`.";
+      };
 
       firmware-package = mkOption {
-        type = types.nullOr types.package;
-        default = null;
-        description = "The Linux-process firmware: `pkgs.klipper-firmware` overridden with a host MCU config.";
+        type = types.package;
+        default = cfg.firmware-package.override {
+          mcu = "host";
+          firmwareConfig = cfg.host-mcu.configFile;
+        };
+        defaultText = literalExpression ''config.services.klipper.firmware-package.override { mcu = "host"; firmwareConfig = config.services.klipper.host-mcu.configFile; }'';
+        description = "The Linux process firmware the `klipper-mcu` service runs.";
       };
 
       realtime = mkOption {
@@ -292,10 +312,6 @@ in {
           assertion = (cfg.configFile != null) -> (cfg.extraSettings == "");
           message = "You can't use services.klipper.extraSettings with services.klipper.configFile.";
         }
-        {
-          assertion = cfg.host-mcu.enable -> cfg.host-mcu.firmware-package != null;
-          message = "Option services.klipper.host-mcu.firmware-package is required for host-mcu to work.";
-        }
       ]
       ++ lib.mapAttrsToList (mcu: firmware: {
         assertion = firmware.enableKlipperFlash -> (firmware.serial != null || firmware.canbusUuid != null);
@@ -312,17 +328,10 @@ in {
 
     environment.etc = let
       pluginsWithConfig = lib.filter (p: p ? klipper && p.klipper.config) ((cfg.package.plugins or []) ++ cfg.extraConfigurationPackages);
-
-      katapultFirmwares = lib.mapAttrs' (name: fcfg:
-        lib.nameValuePair (sanitize name) (pkgs.katapult-firmware.override {
-          mcu = sanitize name;
-          firmwareConfig = fcfg.configFile;
-        }))
-      (lib.filterAttrs (_: v: v.enable) cfg.katapult);
     in
       lib.listToAttrs (map (p: lib.nameValuePair "klipper/plugins/${p.pname}" {source = "${p}/lib/config";}) pluginsWithConfig)
       // lib.mapAttrs' (name: f: lib.nameValuePair "klipper/firmwares/${sanitize name}" {source = f.package;}) enabledFirmwares
-      // lib.mapAttrs' (name: v: lib.nameValuePair "klipper/katapult-firmwares/${name}" {source = v;}) katapultFirmwares;
+      // lib.mapAttrs' (name: f: lib.nameValuePair "klipper/katapult-firmwares/${sanitize name}" {source = f.katapultPackage;}) (lib.filterAttrs (_: f: f.katapultPackage != null) cfg.firmwares);
 
     environment.systemPackages =
       [(pkgs.klipper-menuconfig.override {klipper = cfg.package;})]

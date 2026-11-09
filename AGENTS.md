@@ -8,7 +8,7 @@ Klipper on NixOS: packages, plugins, and NixOS modules, consumed as a flake inpu
 flake.nix                    inputs, `packages`, `overlays.default`, `nixosModules.{default,klipper}`
 lib/import-packages.nix      callPackage for every `<name>.nix` in a folder (`_`-prefixed names skipped)
 packages/                    one package per file; `klipper.nix` is shared by Klipper and Kalico
-packages/_files/             simulator.cfg (default firmware config)
+packages/_files/             simulator.cfg (default firmware config), host-mcu.config (default host MCU config)
 packages/_patches/           cross-ffi patches (Klipper and Kalico spelling)
 packages/_deps-hash/         generated hashes (Mainsail's npm dependencies)
 plugins/                     Klipper plugins; each sets `passthru.klipper` (extras, config, pythonDependencies)
@@ -29,7 +29,7 @@ sources/                     nvfetcher: `nvfetcher.toml` and the generated sourc
 ## Modules
 
 - `modules/klipper.nix` replaces nixpkgs' `services.klipper` (`disabledModules`), rebased on its nixos-unstable version, so nixpkgs' moonraker module keeps reading `services.klipper.{enable,apiSocket,mutableConfig}`. Keep those options and their meaning. On a nixpkgs update, diff `nixos/modules/services/misc/klipper.nix` there against this module and port what changed.
-- Additions over nixpkgs: `firmware-package` (defaults to the firmware of `package`), `extraConfigurationPackages` and plugin configs in `/etc/klipper/plugins`, `katapult.<mcu>`, `host-mcu`, fixed `user`/`group` (no DynamicUser, moonraker shares the user), firmware links in `/etc/klipper/firmwares`. The `firmwares.<mcu>` options are nixpkgs' own, CAN flashing included; keep them that way.
+- Additions over nixpkgs: `firmware-package` (defaults to the firmware of `package`), `firmwares.<mcu>.katapultConfigFile` (builds that MCU's Katapult bootloader into `/etc/klipper/katapult-firmwares/<mcu>`, read-only `katapultPackage`), `extraConfigurationPackages` and plugin configs in `/etc/klipper/plugins`, `host-mcu` (the host as a Linux process MCU, `klipper.elf` from `firmware-package` with `host-mcu.configFile`, run by `klipper-mcu.service`), fixed `user`/`group` (no DynamicUser, moonraker shares the user), firmware links in `/etc/klipper/firmwares`. The other `firmwares.<mcu>` options follow nixpkgs, CAN flashing included, with `canbusUuid` in place of nixpkgs' `canbus_uuid`.
 - `modules/spoolman.nix` replaces nixpkgs' `services.spoolman` the same way; its options differ (`dataDir`, `user`, `host`, `port`). `klipper-screen`, `camera-streamer`, and `mobileraker-companion` have no nixpkgs counterpart; if nixpkgs adds one under the same name, the evaluation fails with a duplicate option until the module here disables it.
 
 ## Test a change
