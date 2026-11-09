@@ -42,7 +42,7 @@
       else null;
   in {
     options = {
-      enable = mkEnableOption "building of firmware for manual flashing";
+      enable = mkEnableOption "building of this MCU's firmware (`configFile`) and Katapult bootloader (`katapultConfigFile`); with it off, neither is built";
 
       enableKlipperFlash = mkEnableOption ''
         flashings scripts for firmware. This will add `klipper-flash-$mcu` scripts to your environment which can be called to flash the firmware.
@@ -74,8 +74,9 @@
       };
 
       configFile = mkOption {
-        type = types.path;
-        description = "Path to firmware config which is generated using `<package>-menuconfig`.";
+        type = types.nullOr types.path;
+        default = null;
+        description = "Path to firmware config which is generated using `<package>-menuconfig`. Without it only the Katapult bootloader is built.";
       };
 
       katapultConfigFile = mkOption {
@@ -108,7 +109,7 @@
 
     config = {
       package =
-        if config.enable
+        if config.enable && config.configFile != null
         then
           cfg.firmware-package.override {
             mcu = sanitize name;
@@ -117,7 +118,7 @@
         else null;
 
       klipperFlashPackage =
-        if config.enable && config.enableKlipperFlash
+        if config.package != null && config.enableKlipperFlash
         then
           pkgs.klipper-flash.override {
             klipper = cfg.package;
@@ -131,7 +132,7 @@
         else null;
 
       katapultPackage =
-        if config.katapultConfigFile != null
+        if config.enable && config.katapultConfigFile != null
         then
           pkgs.katapult-firmware.override {
             mcu = sanitize name;
@@ -141,7 +142,7 @@
     };
   });
 
-  enabledFirmwares = lib.filterAttrs (_: f: f.enable) cfg.firmwares;
+  builtFirmwares = lib.filterAttrs (_: f: f.package != null) cfg.firmwares;
 
   printerConfig =
     if cfg.settings != null
@@ -313,29 +314,39 @@ in {
           message = "You can't use services.klipper.extraSettings with services.klipper.configFile.";
         }
       ]
-      ++ lib.mapAttrsToList (mcu: firmware: {
-        assertion = firmware.enableKlipperFlash -> (firmware.serial != null || firmware.canbusUuid != null);
-        message = ''
-          Unable to determine the serial or canbus connection for services.klipper.firmwares."${mcu}". Please set one of the following:
+      ++ lib.concatLists (lib.mapAttrsToList (mcu: firmware: [
+          {
+            assertion = firmware.enable -> (firmware.configFile != null || firmware.katapultConfigFile != null);
+            message = "services.klipper.firmwares.\"${mcu}\" is enabled but has neither configFile nor katapultConfigFile.";
+          }
+          {
+            assertion = (firmware.enable && firmware.enableKlipperFlash) -> firmware.configFile != null;
+            message = "services.klipper.firmwares.\"${mcu}\".enableKlipperFlash needs configFile: there is no firmware to flash.";
+          }
+          {
+            assertion = (firmware.enable && firmware.enableKlipperFlash) -> (firmware.serial != null || firmware.canbusUuid != null);
+            message = ''
+              Unable to determine the serial or canbus connection for services.klipper.firmwares."${mcu}". Please set one of the following:
 
-            - services.klipper.firmwares."${mcu}".serial
-            - services.klipper.firmwares."${mcu}".canbusUuid
-            - services.klipper.settings."${mcu}".serial
-            - services.klipper.settings."${mcu}".canbus_uuid
-        '';
-      })
-      cfg.firmwares;
+                - services.klipper.firmwares."${mcu}".serial
+                - services.klipper.firmwares."${mcu}".canbusUuid
+                - services.klipper.settings."${mcu}".serial
+                - services.klipper.settings."${mcu}".canbus_uuid
+            '';
+          }
+        ])
+        cfg.firmwares);
 
     environment.etc = let
       pluginsWithConfig = lib.filter (p: p ? klipper && p.klipper.config) ((cfg.package.plugins or []) ++ cfg.extraConfigurationPackages);
     in
       lib.listToAttrs (map (p: lib.nameValuePair "klipper/plugins/${p.pname}" {source = "${p}/lib/config";}) pluginsWithConfig)
-      // lib.mapAttrs' (name: f: lib.nameValuePair "klipper/firmwares/${sanitize name}" {source = f.package;}) enabledFirmwares
+      // lib.mapAttrs' (name: f: lib.nameValuePair "klipper/firmwares/${sanitize name}" {source = f.package;}) builtFirmwares
       // lib.mapAttrs' (name: f: lib.nameValuePair "klipper/katapult-firmwares/${sanitize name}" {source = f.katapultPackage;}) (lib.filterAttrs (_: f: f.katapultPackage != null) cfg.firmwares);
 
     environment.systemPackages =
       [(pkgs.klipper-menuconfig.override {klipper = cfg.package;})]
-      ++ lib.mapAttrsToList (_: f: f.package) enabledFirmwares
+      ++ lib.mapAttrsToList (_: f: f.package) builtFirmwares
       ++ lib.filter (p: p != null) (lib.mapAttrsToList (_: f: f.klipperFlashPackage) cfg.firmwares);
 
     systemd.services.klipper = let
