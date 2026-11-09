@@ -30,7 +30,7 @@
   sanitize = lib.strings.sanitizeDerivationName;
 
   # As in nixpkgs: the connection defaults come from `settings.<name>`, so a firmware named after
-  # its Klipper section (`mcu`, `"mcu toolhead"`) needs no `serial` or `canbus_uuid` of its own.
+  # its Klipper section (`mcu`, `"mcu toolhead"`) needs no `serial` or `canbusUuid` of its own.
   firmwareSubmodule = types.submodule ({
     name,
     config,
@@ -56,7 +56,7 @@
         default = fromSettings "serial";
       };
 
-      canbus_uuid = mkOption {
+      canbusUuid = mkOption {
         type = types.nullOr types.str;
         description = "CAN bus uuid of this mcu. Derived from `service.klipper.settings` by default.";
         defaultText = literalExpression "config.services.klipper.settings.<name>.canbus_uuid";
@@ -65,10 +65,10 @@
 
       canbusNetwork = mkOption {
         type = types.nullOr types.str;
-        description = "CAN bus network this mcu is connected to. Defaults to can0 if canbus_uuid is set.";
-        defaultText = literalExpression ''if canbus_uuid != null then "can0" else null'';
+        description = "CAN bus network this mcu is connected to. Defaults to can0 if canbusUuid is set.";
+        defaultText = literalExpression ''if canbusUuid != null then "can0" else null'';
         default =
-          if config.canbus_uuid != null
+          if config.canbusUuid != null
           then "can0"
           else null;
       };
@@ -109,7 +109,7 @@
             klipper-firmware = config.package;
             mcu = sanitize name;
             flashDevice = config.serial;
-            canbusDevice = config.canbus_uuid;
+            canbusDevice = config.canbusUuid;
             inherit (config) canbusNetwork;
             firmwareConfig = config.configFile;
           }
@@ -298,12 +298,12 @@ in {
         }
       ]
       ++ lib.mapAttrsToList (mcu: firmware: {
-        assertion = firmware.enableKlipperFlash -> (firmware.serial != null || firmware.canbus_uuid != null);
+        assertion = firmware.enableKlipperFlash -> (firmware.serial != null || firmware.canbusUuid != null);
         message = ''
           Unable to determine the serial or canbus connection for services.klipper.firmwares."${mcu}". Please set one of the following:
 
             - services.klipper.firmwares."${mcu}".serial
-            - services.klipper.firmwares."${mcu}".canbus_uuid
+            - services.klipper.firmwares."${mcu}".canbusUuid
             - services.klipper.settings."${mcu}".serial
             - services.klipper.settings."${mcu}".canbus_uuid
         '';

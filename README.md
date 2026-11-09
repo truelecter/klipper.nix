@@ -32,7 +32,7 @@ Klipper on NixOS: Klipper and [Kalico](https://github.com/KalicoCrew/kalico) wit
       enable = true;
       enableKlipperFlash = true; # klipper-flash-ebb36
       configFile = ./firmwares/klipper-ebb36; # from kalico-menuconfig
-      canbus_uuid = config.services.klipper.settings."mcu toolhead".canbus_uuid;
+      canbusUuid = config.services.klipper.settings."mcu toolhead".canbus_uuid;
     };
   };
 
