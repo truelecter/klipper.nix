@@ -19,17 +19,20 @@ Klipper on NixOS: Klipper and [Kalico](https://github.com/KalicoCrew/kalico) wit
 `nixosModules.default` imports every module and applies `overlays.default`; `nixosModules.klipper` is the modules alone.
 
 ```nix
-{pkgs, ...}: {
+{config, pkgs, ...}: {
   services.klipper = {
     enable = true;
     package = pkgs.kalico-full-plugins;
-    settings."include /etc/klipper/main.cfg" = {};
+    settings = {
+      "include /etc/klipper/main.cfg" = {};
+      "mcu toolhead".canbus_uuid = "eb213ad58522";
+    };
 
-    firmwares.toolhead = {
+    firmwares.ebb36 = {
       enable = true;
-      enableKlipperFlash = true; # klipper-flash-toolhead
+      enableKlipperFlash = true; # klipper-flash-ebb36
       configFile = ./firmwares/klipper-ebb36; # from kalico-menuconfig
-      mcu.canbus_uuid = "eb213ad58522"; # written into [mcu toolhead]
+      canbus_uuid = config.services.klipper.settings."mcu toolhead".canbus_uuid;
     };
   };
 
@@ -44,7 +47,7 @@ Klipper on NixOS: Klipper and [Kalico](https://github.com/KalicoCrew/kalico) wit
 
 | Option                                 | What it is                                                                                                                                                                                                                       |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `services.klipper`                     | Replaces the nixpkgs module (nixpkgs' moonraker module still finds it). Adds firmware from any Klipper package, `firmwares.<mcu>.mcu` (the MCU's config section, also used for flashing), Katapult builds, plugin configs, and the host MCU |
+| `services.klipper`                     | Replaces the nixpkgs module (nixpkgs' moonraker module still finds it). Adds firmware from any Klipper package, Katapult builds, plugin configs, and the host MCU |
 | `services.klipper-screen`              | KlipperScreen in a cage kiosk, or under X                                                                                                                                                                                        |
 | `services.camera-streamer.instances`   | One camera-streamer service per camera, optionally behind nginx                                                                                                                                                                  |
 | `services.mobileraker-companion`       | Push notifications for the Mobileraker app                                                                                                                                                                                       |

@@ -29,7 +29,7 @@ sources/                     nvfetcher: `nvfetcher.toml` and the generated sourc
 ## Modules
 
 - `modules/klipper.nix` replaces nixpkgs' `services.klipper` (`disabledModules`), rebased on its nixos-unstable version, so nixpkgs' moonraker module keeps reading `services.klipper.{enable,apiSocket,mutableConfig}`. Keep those options and their meaning. On a nixpkgs update, diff `nixos/modules/services/misc/klipper.nix` there against this module and port what changed.
-- Additions over nixpkgs: `firmware-package` (defaults to the firmware of `package`), `firmwares.<mcu>.{section,mcu}` (the MCU's config section, written after `settings` or `configFile` and read by the flasher), `extraConfigurationPackages` and plugin configs in `/etc/klipper/plugins`, `katapult.<mcu>`, `host-mcu`, fixed `user`/`group` (no DynamicUser, moonraker shares the user), firmware links in `/etc/klipper/firmwares`.
+- Additions over nixpkgs: `firmware-package` (defaults to the firmware of `package`), `extraConfigurationPackages` and plugin configs in `/etc/klipper/plugins`, `katapult.<mcu>`, `host-mcu`, fixed `user`/`group` (no DynamicUser, moonraker shares the user), firmware links in `/etc/klipper/firmwares`. The `firmwares.<mcu>` options are nixpkgs' own, CAN flashing included; keep them that way.
 - `modules/spoolman.nix` replaces nixpkgs' `services.spoolman` the same way; its options differ (`dataDir`, `user`, `host`, `port`). `klipper-screen`, `camera-streamer`, and `mobileraker-companion` have no nixpkgs counterpart; if nixpkgs adds one under the same name, the evaluation fails with a duplicate option until the module here disables it.
 
 ## Test a change

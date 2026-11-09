@@ -1,8 +1,8 @@
 # services.klipper, rebased on the nixpkgs module (nixos-unstable, with CAN flashing) and replacing
 # it: nixpkgs' moonraker module reads `services.klipper.{enable,apiSocket,mutableConfig}`, which
 # keep their meaning here. Additions over nixpkgs: firmware built from any Klipper package (Kalico),
-# the MCU connection set per firmware and written into the Klipper config, plugin configurations
-# linked to /etc/klipper/plugins, Katapult bootloader builds, and the host as a Linux-process MCU.
+# plugin configurations linked to /etc/klipper/plugins, Katapult bootloader builds, and the host as
+# a Linux-process MCU.
 {
   config,
   lib,
@@ -27,97 +27,67 @@
       );
   };
 
-  renderSections = sections: lib.optionalString (sections != {}) (format.generate "klipper.cfg" sections).text;
-
   sanitize = lib.strings.sanitizeDerivationName;
 
+  # As in nixpkgs: the connection defaults come from `settings.<name>`, so a firmware named after
+  # its Klipper section (`mcu`, `"mcu toolhead"`) needs no `serial` or `canbus_uuid` of its own.
   firmwareSubmodule = types.submodule ({
     name,
     config,
     ...
   }: let
-    fromConfig = key:
-      config.mcu.${
-        key
-      }
-      or (
-        if cfg.settings != null && lib.hasAttrByPath [config.section key] cfg.settings
-        then cfg.settings.${config.section}.${key}
-        else null
-      );
+    fromSettings = key:
+      if lib.hasAttrByPath [name key] cfg.settings
+      then cfg.settings.${name}.${key}
+      else null;
   in {
     options = {
       enable = mkEnableOption "building of firmware for manual flashing";
 
       enableKlipperFlash = mkEnableOption ''
-        flashing scripts for firmware. This will add `klipper-flash-$mcu` scripts to your environment which can be called to flash the firmware.
+        flashings scripts for firmware. This will add `klipper-flash-$mcu` scripts to your environment which can be called to flash the firmware.
         Please check the configs at [klipper](https://github.com/Klipper3d/klipper/tree/master/config) whether your board supports flashing via `make flash`
       '';
+
+      serial = mkOption {
+        type = types.nullOr types.path;
+        description = "Path to serial port this mcu is connected to. Derived from `service.klipper.settings` by default.";
+        defaultText = literalExpression "config.services.klipper.settings.<name>.serial";
+        default = fromSettings "serial";
+      };
+
+      canbus_uuid = mkOption {
+        type = types.nullOr types.str;
+        description = "CAN bus uuid of this mcu. Derived from `service.klipper.settings` by default.";
+        defaultText = literalExpression "config.services.klipper.settings.<name>.canbus_uuid";
+        default = fromSettings "canbus_uuid";
+      };
+
+      canbusNetwork = mkOption {
+        type = types.nullOr types.str;
+        description = "CAN bus network this mcu is connected to. Defaults to can0 if canbus_uuid is set.";
+        defaultText = literalExpression ''if canbus_uuid != null then "can0" else null'';
+        default =
+          if config.canbus_uuid != null
+          then "can0"
+          else null;
+      };
 
       configFile = mkOption {
         type = types.path;
         description = "Path to firmware config which is generated using `<package>-menuconfig`.";
       };
 
-      section = mkOption {
-        type = types.str;
-        default =
-          if name == "mcu"
-          then "mcu"
-          else "mcu ${name}";
-        defaultText = literalExpression ''if name == "mcu" then "mcu" else "mcu ''${name}"'';
-        example = "mcu toolhead";
-        description = "The Klipper config section of this MCU, for `mcu` and to read `serial` and `canbus_uuid` from `settings`.";
-      };
-
-      mcu = mkOption {
-        type = types.attrsOf (types.oneOf [types.bool types.int types.float types.str]);
-        default = {};
-        example = {
-          canbus_uuid = "eb213ad58522";
-        };
-        description = ''
-          Options of this MCU's Klipper config section (`[<section>]`), written into the generated
-          config after `settings` or `configFile`. Klipper merges a section that a file included
-          earlier also defines, and these values win, so the connection can live here while the rest
-          of the printer stays in `.cfg` files.
-        '';
-      };
-
-      serial = mkOption {
-        type = types.nullOr types.path;
-        default = fromConfig "serial";
-        defaultText = literalExpression "mcu.serial, else settings.<section>.serial, else null";
-        description = "Path to the serial port this MCU is connected to.";
-      };
-
-      canbus_uuid = mkOption {
-        type = types.nullOr types.str;
-        default = fromConfig "canbus_uuid";
-        defaultText = literalExpression "mcu.canbus_uuid, else settings.<section>.canbus_uuid, else null";
-        description = "CAN bus uuid of this MCU.";
-      };
-
-      canbusNetwork = mkOption {
-        type = types.nullOr types.str;
-        default =
-          if config.canbus_uuid == null
-          then null
-          else lib.defaultTo "can0" (fromConfig "canbus_interface");
-        defaultText = literalExpression ''if canbus_uuid != null then canbus_interface from the config or "can0" else null'';
-        description = "CAN bus network this MCU is connected to.";
-      };
-
       package = mkOption {
         type = types.nullOr types.package;
         readOnly = true;
-        description = "The built firmware package.";
+        description = "Path to the built firmware package.";
       };
 
       klipperFlashPackage = mkOption {
         type = types.nullOr types.package;
         readOnly = true;
-        description = "The built klipper-flash package.";
+        description = "Path to the built klipper-flash package.";
       };
     };
 
@@ -134,36 +104,25 @@
       klipperFlashPackage =
         if config.enable && config.enableKlipperFlash
         then
-          pkgs.klipper-flash.override ({
-              klipper = cfg.package;
-              klipper-firmware = config.package;
-              mcu = sanitize name;
-              firmwareConfig = config.configFile;
-            }
-            // (
-              if config.serial != null
-              then {flashDevice = config.serial;}
-              else {
-                canbusDevice = config.canbus_uuid;
-                inherit (config) canbusNetwork;
-              }
-            ))
+          pkgs.klipper-flash.override {
+            klipper = cfg.package;
+            klipper-firmware = config.package;
+            mcu = sanitize name;
+            flashDevice = config.serial;
+            canbusDevice = config.canbus_uuid;
+            inherit (config) canbusNetwork;
+            firmwareConfig = config.configFile;
+          }
         else null;
     };
   });
 
   enabledFirmwares = lib.filterAttrs (_: f: f.enable) cfg.firmwares;
 
-  mcuSections = lib.mapAttrs' (_: f: lib.nameValuePair f.section f.mcu) (lib.filterAttrs (_: f: f.mcu != {}) cfg.firmwares);
-
-  mcuText = lib.optionalString (mcuSections != {}) ("\n" + renderSections mcuSections);
-
   printerConfig =
     if cfg.settings != null
-    then pkgs.writeText "klipper.cfg" (renderSections cfg.settings + mcuText + cfg.extraSettings)
-    else if mcuSections == {}
-    then cfg.configFile
-    else pkgs.concatText "klipper.cfg" [cfg.configFile (pkgs.writeText "klipper-mcus.cfg" mcuText)];
+    then pkgs.writeText "klipper.cfg" ((format.generate "" cfg.settings).text + cfg.extraSettings)
+    else cfg.configFile;
 in {
   disabledModules = ["services/misc/klipper.nix"];
 
@@ -269,11 +228,11 @@ in {
       default = {};
       type = types.attrsOf firmwareSubmodule;
       example = {
-        toolhead = {
+        mcu = {
           enable = true;
           enableKlipperFlash = true;
-          configFile = literalExpression "./klipper-ebb36.cfg";
-          mcu.canbus_uuid = "eb213ad58522";
+          serial = "/dev/serial/by-id/usb-Klipper_123ABCDEF";
+          configFile = literalExpression "./klipper-firmware.cfg";
         };
       };
     };
@@ -343,10 +302,10 @@ in {
         message = ''
           Unable to determine the serial or canbus connection for services.klipper.firmwares."${mcu}". Please set one of the following:
 
-            - services.klipper.firmwares."${mcu}".mcu.serial or .serial
-            - services.klipper.firmwares."${mcu}".mcu.canbus_uuid or .canbus_uuid
-            - services.klipper.settings."${firmware.section}".serial
-            - services.klipper.settings."${firmware.section}".canbus_uuid
+            - services.klipper.firmwares."${mcu}".serial
+            - services.klipper.firmwares."${mcu}".canbus_uuid
+            - services.klipper.settings."${mcu}".serial
+            - services.klipper.settings."${mcu}".canbus_uuid
         '';
       })
       cfg.firmwares;
