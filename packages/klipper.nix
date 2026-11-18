@@ -130,13 +130,6 @@ in
       cp -r $src/config $out/lib/config
       cp -r $src/scripts $out/lib/scripts
       chmod u+w $out/lib/scripts
-      # Katapult's flashtool, which klipper-flash runs for MCUs on a CAN bus. Kalico still ships
-      # it under its old name (CanBoot).
-      if [ -e $src/lib/katapult/flashtool.py ]; then
-        cp $src/lib/katapult/flashtool.py $out/lib/scripts/flash_can.py
-      else
-        cp $src/lib/canboot/flash_can.py $out/lib/scripts/flash_can.py
-      fi
       ${
         if isKalico
         then ""

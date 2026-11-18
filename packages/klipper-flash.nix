@@ -1,10 +1,11 @@
 # From nixpkgs pkgs/servers/klipper/klipper-flash.nix (nixos-unstable, with CAN flashing): `klipper-flash-<mcu>`,
-# which flashes a built firmware over USB/serial (flash_usb.py, avrdude) or a CAN bus (flash_can.py).
+# which flashes a built firmware over USB/serial (flash_usb.py, avrdude) or a CAN bus (Katapult's flashtool).
 {
   lib,
   writeShellApplication,
   klipper,
   klipper-firmware,
+  katapult-flashtool,
   avrdude,
   dfu-util,
   stm32flash,
@@ -98,7 +99,9 @@ in
           ${klipper-firmware}
           EOF
         ''
+      # Katapult's own flashtool, not the copy Klipper or Kalico ship: Kalico's (CanBoot) can't flash a
+      # USB-CAN bridge MCU, which reboots into Katapult as a USB serial device.
       else ''
-        ${klipper}/lib/scripts/flash_can.py -i ${canbusNetwork} -f ${klipper-firmware}/klipper.bin -u ${canbusDevice} "$@"
+        ${katapult-flashtool}/bin/katapult-flashtool -i ${canbusNetwork} -f ${klipper-firmware}/klipper.bin -u ${canbusDevice} "$@"
       '';
   }
